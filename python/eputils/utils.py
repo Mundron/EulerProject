@@ -1,40 +1,8 @@
 from collections import Counter
 from pathlib import Path
-from math import inf
+from math import inf, sqrt
 
-prime_path = Path(Path(__file__).parent, "primes.txt")
-
-try:
-    with open(prime_path, "r", encoding="utf-8") as fh:
-        known_primes = [int(line.strip()) for line in fh]
-    print(f"Loaded {len(known_primes):,} known primes")
-except FileNotFoundError:
-    known_primes = [2, 3, 5, 7, 11]
-    with open(prime_path, "w", encoding="utf-8") as fh:
-        for p in known_primes:
-            fh.write(f"{p}\n")
-
-
-def get_primes(limit=None):
-    if limit:
-        for p in known_primes:
-            if p > limit:
-                break
-            yield p
-    else:
-        yield from known_primes
-
-    p = known_primes[-1] + 1
-    while limit is None or p < limit:
-        for kp in known_primes:
-            if p % kp == 0:
-                break
-        else:
-            yield p
-            known_primes.append(p)
-            with open(prime_path, "a", encoding="utf-8") as fh:
-                fh.write(f"{p}\n")
-        p += 1
+folder = Path(__file__).parent
 
 
 def prod(args):
@@ -44,16 +12,6 @@ def prod(args):
     return result
 
 
-def get_prime_factors(value):
-    while value > 1:
-        for prime in get_primes():
-            if prime > value:
-                break
-            while value % prime == 0:
-                yield prime
-                value //= prime
-
-
 def fact(value):
     if value <= 1:
         return 1
@@ -61,17 +19,28 @@ def fact(value):
 
 
 class Series:
-    def __init__(self, index=1, value=1, values=None):
-        if values:
-            self.sorted = values
-            self.known = set(values)
-            self.index = len(values)
-            self.value = values[-1]
-        else:
-            self.index, self.value = index, value
-            self.known = {value}
-            self.sorted = [value]
+    def __init__(self, name, value=1, limit=None):
+        try:
+            self.path = Path(folder, f"{name}.txt")
+            with open(self.path, "r", encoding="utf-8") as fh:
+                values = []
+                for line in fh:
+                    value = int(line.strip())
+                    if limit and value > limit:
+                        break
+                    values.append(value)
+        except FileNotFoundError:
+            values = [value]
+
+        self.sorted = values
+        self.known = set(values)
+        self.index = len(values)
+        self.value = values[-1]
+
+        self.iter_start = 0
         self.iter_limit = inf
+
+        self.limited = limit
 
     def __contains__(self, number):
         while number > self.value:
@@ -85,66 +54,73 @@ class Series:
         return self.sorted[index]
 
     def add_next(self):
+        if self.limited and self.value >= self.limited:
+            raise ValueError(
+                "Attempt to use series beyond given limitation of "
+                f"{self.limited}"
+            )
         self.known.add(self.value)
         self.sorted.append(self.value)
+        with open(self.path, "a", encoding="utf-8") as fh:
+            fh.write(f"{self.value}\n")
 
     def __iter__(self):
         self.current_index = -1
         return self
 
-    def __call__(self, limit):
+    def __call__(self, start=0, limit=inf):
+        self.iter_start = start
         self.iter_limit = limit
         return self.__iter__()
 
     def __next__(self):
-        self.current_index += 1
-        while self.current_index + 1 > len(self.sorted):
-            self.add_next()
-        result = self.sorted[self.current_index]
+        result = self.iter_start - 1
+        while result < self.iter_start:
+            self.current_index += 1
+            while self.current_index + 1 > len(self.sorted):
+                self.add_next()
+            result = self.sorted[self.current_index]
+
         if result > self.iter_limit:
+            self.iter_start = 0
             self.iter_limit = inf
             raise StopIteration
         return result
 
 
 class Prime(Series):
-    def __init__(self):
-        with open(prime_path, "r", encoding="utf-8") as fh:
-            values = [int(line.strip()) for line in fh]
-        super().__init__(values=values)
+    def __init__(self, *args, **kwargs):
+        super().__init__("primes", 2, *args, **kwargs)
 
     def add_next(self):
         while True:
             self.value += 1
+            is_prime, svalue = True, sqrt(self.value)
             for kp in self.known:
-                if self.value % kp == 0:
+                if kp > svalue:
                     break
-            else:
+                if self.value % kp == 0:
+                    is_prime = False
+                    break
+            if is_prime:
                 break
-        with open(prime_path, "a", encoding="utf-8") as fh:
-            fh.write(f"{self.value}\n")
         super().add_next()
 
     def get_factorization(self, number):
         if abs(number) <= 1:
             return {}
-        # print(f"Get factorization for {number}")
         result = Counter()
         for p in self:
-            # print(f"Check for prime {p}")
             while number % p == 0:
                 result[p] += 1
                 number //= p
-                # print(f"Had divisibility by {p} and remaining {number}")
             if abs(number) == 1:
                 return result
-            # if p > 10:
-            #     break
 
 
 class Triagonal(Series):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__("triagonals", 1, *args, **kwargs)
 
     def add_next(self):
         self.index += 1
@@ -154,7 +130,7 @@ class Triagonal(Series):
 
 class Pentagonal(Series):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__("pentagonals", 1, *args, **kwargs)
 
     def add_next(self):
         self.index += 1
@@ -164,7 +140,7 @@ class Pentagonal(Series):
 
 class Hexagonal(Series):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__("hexagonals", 1, *args, **kwargs)
 
     def add_next(self):
         self.index += 1
