@@ -19,7 +19,7 @@ def fact(value):
 
 
 class Series:
-    def __init__(self, name, value=1, limit=None):
+    def __init__(self, name, value=1, values=None, limit=None):
         try:
             self.path = Path(folder, f"{name}.txt")
             with open(self.path, "r", encoding="utf-8") as fh:
@@ -30,7 +30,11 @@ class Series:
                         break
                     values.append(value)
         except FileNotFoundError:
-            values = [value]
+            if values is None:
+                values = [value]
+            with open(self.path, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(map(str, values)))
+                fh.write("\n")
 
         self.sorted = values
         self.known = set(values)
@@ -61,8 +65,9 @@ class Series:
             )
         self.known.add(self.value)
         self.sorted.append(self.value)
-        with open(self.path, "a", encoding="utf-8") as fh:
-            fh.write(f"{self.value}\n")
+        if len(self.sorted) < 100_000:
+            with open(self.path, "a", encoding="utf-8") as fh:
+                fh.write(f"{self.value}\n")
 
     def __iter__(self):
         self.current_index = -1
@@ -90,19 +95,29 @@ class Series:
 
 class Prime(Series):
     def __init__(self, *args, **kwargs):
-        super().__init__("primes", 2, *args, **kwargs)
+        self.index_flip = True
+        super().__init__("primes", *args, values=[2, 3, 5], **kwargs)
 
     def add_next(self):
         while True:
-            self.value += 1
+            if self.index_flip:
+                self.value += 2
+            else:
+                self.value += 4
+            self.index_flip = not self.index_flip
+            # print(f"Test value {self.value}")
             is_prime, svalue = True, sqrt(self.value)
-            for kp in self.known:
+            for kp in self.sorted:
                 if kp > svalue:
+                    # print(f"Nothing found until {kp} > {svalue}")
                     break
+                # print(f"Check if {self.value} is divisible by {kp}")
                 if self.value % kp == 0:
+                    # print("Divisible, so no prime")
                     is_prime = False
                     break
             if is_prime:
+                # print(f"Ok, {self.value} is next prime")
                 break
         super().add_next()
 
@@ -117,6 +132,20 @@ class Prime(Series):
             if abs(number) == 1:
                 return result
 
+    def is_prime(self, value):
+        limit = int(sqrt(value))
+        # print(f"Check of {value} is prime until {limit}")
+        while self.value < limit:
+            self.add_next()
+        for p in self.sorted:
+            if p > limit:
+                break
+            if value % p == 0:
+                # print(f"{value} is divisble by {p}")
+                return False
+        # print(f"{value} is prime")
+        return True
+
 
 class Triagonal(Series):
     def __init__(self, *args, **kwargs):
@@ -125,6 +154,16 @@ class Triagonal(Series):
     def add_next(self):
         self.index += 1
         self.value = self.index * (self.index + 1) // 2
+        super().add_next()
+
+
+class Square(Series):
+    def __init__(self, *args, **kwargs):
+        super().__init__("squares", 1, *args, **kwargs)
+
+    def add_next(self):
+        self.index += 1
+        self.value = self.index**2
         super().add_next()
 
 
@@ -145,4 +184,24 @@ class Hexagonal(Series):
     def add_next(self):
         self.index += 1
         self.value = self.index * (2 * self.index - 1)
+        super().add_next()
+
+
+class Heptagonal(Series):
+    def __init__(self, *args, **kwargs):
+        super().__init__("heptagonals", 1, *args, **kwargs)
+
+    def add_next(self):
+        self.index += 1
+        self.value = self.index * (5 * self.index - 3) // 2
+        super().add_next()
+
+
+class Octagonal(Series):
+    def __init__(self, *args, **kwargs):
+        super().__init__("octagonals", 1, *args, **kwargs)
+
+    def add_next(self):
+        self.index += 1
+        self.value = self.index * (3 * self.index - 2)
         super().add_next()
